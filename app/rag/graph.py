@@ -2,7 +2,9 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
 from langchain_core.chat_history import BaseChatMessageHistory,InMemoryChatMessageHistory
+from app.api.task_tools import create_task,get_tasks,update_task,delete_task,get_task_by_id
 from langchain_core.messages import AIMessage,HumanMessage
+from langchain_core.agents import initialize_agent, AgentType
 from app.memory.manager import MemoryManager
 from langgraph.graph import StateGraph,END
 import os
@@ -37,18 +39,29 @@ def input_handler(state: GraphState) -> GraphState:
 def agent_node(state: GraphState) -> GraphState:
     """Run the LLM with memory context + tools (RAG, CRUD)."""
     llm = ChatOllama(model=OLLAMA_MODEL, temperature=0)
+    tools = [create_task, get_tasks, update_task, delete_task, get_task_by_id]
 
-    prompt = ChatPromptTemplate.from_messages([
-         ("system", "You are TaskPilot AI. Use memory + tools to help manage tasks."),
-         ("system", "If relevant, use CRUD tools (via APIs) to create/update/delete tasks."),
-         ("user", "{input}")
-    ])
+    #initialize agent
+    agent = initialize_agent(
+        tools=tools,
+        llm=llm,
+        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+        verbose=True,
+        handle_parsing_errors=True,
+    )
+    # prompt = ChatPromptTemplate.from_messages([
+    #      ("system", "You are TaskPilot AI. Use memory + tools to help manage tasks."),
+    #      ("system", "If relevant, use CRUD tools (via APIs) to create/update/delete tasks."),
+    #      ("user", "{input}")
+    # ])
 
-    chain =prompt | llm
-    response = chain.invoke({
-        "input": state['input'],
-         "history": state["chat_history"]
-    })
+    # chain =prompt | llm
+    # response = chain.invoke({
+    #     "input": state['input'],
+    #      "history": state["chat_history"]
+    # })
+    # run with chat history context
+    response = agent.run(input=state['input'])   
     state['output'] = response.content
     return state
 
